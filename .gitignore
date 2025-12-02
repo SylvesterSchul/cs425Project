@@ -1,0 +1,9 @@
+data/raw/ml-latest-small/
+data/processed/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
