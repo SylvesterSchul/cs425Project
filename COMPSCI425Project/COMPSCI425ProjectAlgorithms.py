@@ -62,18 +62,32 @@ def userToUser(userID):
     #Finding best recommendations from similar users
     #For each user, recommend highest rated movie that given user hasn't rated
     movieDF = pd.read_csv('ml-latest-small/ml-latest-small/movies.csv')
-    for x in similarUserIDs:
-        userDF = df.loc[df['userId'] == x]
-        userDF = userDF.sort_values(by='rating', ascending=False)
+
+    print(f"\nTop {len(similarUserIDs)} recommendations for user {userID}:\n")
+    rec_num = 1
+
+    givenUserMoviesSet = set(givenUserMovies)
+
+    for sim_user in similarUserIDs:
+        if sim_user == -1:
+            continue
+
+        userDF = df.loc[df['userId'] == sim_user].sort_values(by='rating', ascending=False)
         userMovies = userDF['movieId'].tolist()
-        notPrinted = True
-        movieIndex = 0
-        while movieIndex < userDF['movieId'].count() and notPrinted:
-            #Check if the movie is rated by given user
-            if not userMovies[movieIndex] in givenUserDF.values:
-                print(movieDF.loc[movieDF['movieId'] == userMovies[movieIndex]])
-                notPrinted = False
-            movieIndex += 1
-                
-    
+
+        # find first movie this similar user rated that our user hasn't rated
+        for movie_id in userMovies:
+            if movie_id not in givenUserMoviesSet:
+                movie_row = movieDF.loc[movieDF['movieId'] == movie_id].iloc[0]
+                title = movie_row["title"]
+                genres = movie_row["genres"]
+
+                print(f"{rec_num}. {title}")
+                print(f"   Genres: {genres}")
+                # optional: show which similar user it came from
+                # print(f"   From similar user: {sim_user}")
+                print()
+                rec_num += 1
+                break
+
 userToUser(1)
