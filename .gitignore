@@ -1,9 +1,11 @@
-data/raw/ml-latest-small/
-data/processed/
+data/raw/
+*.dat
 
-# Python
 __pycache__/
 *.pyc
 *.pyo
-venv/
-env/
+
+results/*.png
+
+.DS_Store
+Thumbs.db
