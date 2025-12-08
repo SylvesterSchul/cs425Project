@@ -84,10 +84,33 @@ def userToUser(userID):
 
                 print(f"{rec_num}. {title}")
                 print(f"   Genres: {genres}")
-                # optional: show which similar user it came from
-                # print(f"   From similar user: {sim_user}")
                 print()
                 rec_num += 1
                 break
 
-userToUser(1)
+
+# USER INPUT SECTION
+if __name__ == "__main__":
+    df = pd.read_csv('ml-latest-small/ml-latest-small/ratings.csv')
+    valid_users = df['userId'].unique()
+
+    while True:
+        try:
+            user_input = input("Enter a user ID (or 'q' to quit): ")
+
+            if user_input.lower() == "q":
+                print("Exiting program.")
+                break
+
+            user_input = int(user_input)
+
+            if user_input not in valid_users:
+                print("❌ That user ID does not exist in the dataset. Try again.\n")
+                continue
+
+            print(f"\nRunning recommendations for user {user_input}...\n")
+            userToUser(user_input)
+            break
+
+        except ValueError:
+            print("❌ Please enter a valid number.\n")
