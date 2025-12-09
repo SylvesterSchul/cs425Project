@@ -6,7 +6,7 @@ from scipy.sparse import lil_matrix
 
 class CollaborativeFiltering:
     
-    def __init__(self, k=60):
+    def __init__(self, k=120):
         self.k = k
         self.utility_matrix = None
         self.user_similarity = None
@@ -15,7 +15,7 @@ class CollaborativeFiltering:
         self.n_movies = None
     
     def fit(self, utility_matrix):
-        print(f"\nTraining CF (Pearson correlation, k={self.k})...")
+        print(f"\nTraining CF (k={self.k})...")
         self.utility_matrix = utility_matrix
         self.n_users, self.n_movies = utility_matrix.shape
         
@@ -46,7 +46,7 @@ class CollaborativeFiltering:
         np.fill_diagonal(self.user_similarity, -1)
     
     def find_neighbors(self, user_idx):
-        """Find k most similar users"""
+
         similarities = self.user_similarity[user_idx]
         
         if self.k < len(similarities):
@@ -58,7 +58,7 @@ class CollaborativeFiltering:
         return neighbor_indices, similarities[neighbor_indices]
     
     def predict_rating(self, user_idx, movie_idx):
-        """Predict rating using weighted average of k neighbors"""
+
         neighbor_indices, neighbor_similarities = self.find_neighbors(user_idx)
         
         neighbor_ratings = []
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     ratings_df, movies_df = load_movielens()
     utility_matrix, user_map, movie_map, user_reverse, movie_reverse = create_utility_matrix(ratings_df)
     
-    cf = CollaborativeFiltering(k=100)
+    cf = CollaborativeFiltering(k=120)
     cf.fit(utility_matrix)
     
     test_user_idx = 0
@@ -127,4 +127,4 @@ if __name__ == "__main__":
         movie_info = movies_df[movies_df['movie_id'] == movie_id].iloc[0]
         print(f"  {rank}. {movie_info['title']}")
     
-    print("\n✓ CF complete")
+    print("\nCF complete")
