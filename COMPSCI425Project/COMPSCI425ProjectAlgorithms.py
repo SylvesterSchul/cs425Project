@@ -1,102 +1,144 @@
-#Data Mining algorithms
+# Data Mining algorithms (Item-based Collaborative Filtering)
+# Pearson correlation on MOVIES (items) instead of USERS
+
 import pandas as pd
 import math
 
-#user to user function
-#Given a user, compare to all other user ratings
-#Find the top 5 most similar users
-#Print the highest rating among them that the given user hasn't rated
-#Excel file has a userID, movieID, and rating
-#Not sure if there's any point in hashing. Data is already very simple. Just following slides
-def userToUser(userID):
-    similarUserIDs = [-1, -1, -1, -1, -1]
-    similarityMeasures = [-1, -1, -1, -1, -1]
-    df = pd.read_csv('ml-latest-small/ml-latest-small/ratings.csv')
-    userIDIndex = 1
-    givenUserDF = df.loc[df['userId'] == userID]
-    #The same index corresponds to these two lists
-    givenUserMovies = givenUserDF['movieId'].tolist()
-    givenUserRatings = givenUserDF['rating'].tolist()
-    givenUserAvgRatings = givenUserDF['rating'].mean()
-    maxID = df['userId'].max()
-    userIndex = 1
-    #Finding most similar users
-    while userIndex < maxID:
-        if(userIndex != userID):
-            numerator = 0
-            denom1 = 0
-            denom2 = 0
-            xIndex = 0
-            userDF = df.loc[df['userId'] == userIndex]
-            userMovies = userDF['movieId'].tolist()
-            userRatings = userDF['rating'].tolist()
-            userAvgRatings = userDF['rating'].mean()
-            #similarity calculation
-            for x in givenUserMovies:
-                yIndex = 0
-                for y in userMovies:
-                    if x == y:
-                        numerator += (givenUserRatings[xIndex] - givenUserAvgRatings) * (userRatings[yIndex] - userAvgRatings)
-                        denom1 += (givenUserRatings[xIndex] - givenUserAvgRatings) * (givenUserRatings[xIndex] - givenUserAvgRatings)
-                        denom2 += (userRatings[yIndex] - userAvgRatings) * (userRatings[yIndex] - userAvgRatings)
-                    yIndex += 1
-                xIndex += 1
-            totalDenom = (math.sqrt(denom1) * math.sqrt(denom2))
-            if totalDenom > 0: #There is no overlap
-                similarityCalc = (numerator / (math.sqrt(denom1) * math.sqrt(denom2)))
-            else:
-                similarityCalc = 0
-            simIndex = 0
-            tempUserIndex = userIndex
-            #Swapping values if better similarity is found
-            while simIndex < 5:
-                if (similarityCalc > similarityMeasures[simIndex]):
-                    temp = similarityMeasures[simIndex]
-                    similarityMeasures[simIndex] = similarityCalc
-                    similarityCalc = temp
-                    temp = similarUserIDs[simIndex]
-                    similarUserIDs[simIndex] = tempUserIndex
-                    tempUserIndex = temp
-                simIndex += 1
-        userIndex += 1
-    #Finding best recommendations from similar users
-    #For each user, recommend highest rated movie that given user hasn't rated
-    movieDF = pd.read_csv('ml-latest-small/ml-latest-small/movies.csv')
+# ----------------------------
+# Helper: Build maps for fast lookup
+# user -> {movieId: rating}
+# movie -> {userId: rating}
+# ----------------------------
+def build_maps(ratings_df: pd.DataFrame):
+    user_movie = {}
+    movie_user = {}
 
-    print(f"\nTop {len(similarUserIDs)} recommendations for user {userID}:\n")
-    rec_num = 1
+    for row in ratings_df.itertuples(index=False):
+        uid = int(row.userId)
+        mid = int(row.movieId)
+        r = float(row.rating)
 
-    givenUserMoviesSet = set(givenUserMovies)
+        user_movie.setdefault(uid, {})[mid] = r
+        movie_user.setdefault(mid, {})[uid] = r
 
-    for sim_user in similarUserIDs:
-        if sim_user == -1:
+    return user_movie, movie_user
+
+
+# ----------------------------
+# Pearson similarity between two MOVIES
+# Uses ratings from users who rated BOTH movies
+# ----------------------------
+def pearson_movie_similarity(movieA: int, movieB: int, movie_user: dict, min_common_users: int = 2) -> float:
+    usersA = movie_user.get(movieA, {})
+    usersB = movie_user.get(movieB, {})
+
+    common_users = set(usersA.keys()) & set(usersB.keys())
+    if len(common_users) < min_common_users:
+        return 0.0
+
+    a_vals = [usersA[u] for u in common_users]
+    b_vals = [usersB[u] for u in common_users]
+
+    meanA = sum(a_vals) / len(a_vals)
+    meanB = sum(b_vals) / len(b_vals)
+
+    num = 0.0
+    denomA = 0.0
+    denomB = 0.0
+
+    for u in common_users:
+        da = usersA[u] - meanA
+        db = usersB[u] - meanB
+        num += da * db
+        denomA += da * da
+        denomB += db * db
+
+    denom = math.sqrt(denomA) * math.sqrt(denomB)
+    return (num / denom) if denom != 0 else 0.0
+
+
+# ----------------------------
+# Item-based recommender
+# ----------------------------
+def recommend_item_based(user_id: int, top_n: int = 5, per_movie_neighbors: int = 30, min_common_users: int = 2):
+    ratings_df = pd.read_csv('ml-latest-small/ml-latest-small/ratings.csv')
+    movies_df = pd.read_csv('ml-latest-small/ml-latest-small/movies.csv')
+
+    user_movie, movie_user = build_maps(ratings_df)
+
+    if user_id not in user_movie:
+        print("❌ That user ID does not exist in the dataset.\n")
+        return
+
+    user_rated = user_movie[user_id]
+    rated_movies = set(user_rated.keys())
+
+    movie_info = movies_df.set_index("movieId")[["title", "genres"]]
+
+    sim_cache = {}
+
+    def sim(m1: int, m2: int) -> float:
+        key = (m1, m2) if m1 < m2 else (m2, m1)
+        if key in sim_cache:
+            return sim_cache[key]
+        s = pearson_movie_similarity(m1, m2, movie_user, min_common_users=min_common_users)
+        sim_cache[key] = s
+        return s
+
+    all_movies = set(movie_user.keys())
+    candidates = list(all_movies - rated_movies)
+
+    scored = []
+
+    for cand in candidates:
+        sims = []
+        for seen_movie, seen_rating in user_rated.items():
+            s = sim(cand, seen_movie)
+            if s != 0:
+                sims.append((s, seen_rating))
+
+        if not sims:
             continue
 
-        userDF = df.loc[df['userId'] == sim_user].sort_values(by='rating', ascending=False)
-        userMovies = userDF['movieId'].tolist()
+        sims.sort(key=lambda x: abs(x[0]), reverse=True)
+        sims = sims[:per_movie_neighbors]
 
-        # find first movie this similar user rated that our user hasn't rated
-        for movie_id in userMovies:
-            if movie_id not in givenUserMoviesSet:
-                movie_row = movieDF.loc[movieDF['movieId'] == movie_id].iloc[0]
-                title = movie_row["title"]
-                genres = movie_row["genres"]
+        numerator = sum(s * r for s, r in sims)
+        denominator = sum(abs(s) for s, _ in sims)
 
-                print(f"{rec_num}. {title}")
-                print(f"   Genres: {genres}")
-                print()
-                rec_num += 1
-                break
+        if denominator == 0:
+            continue
+
+        pred_score = numerator / denominator
+        scored.append((cand, pred_score, len(sims)))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    top = scored[:top_n]
+
+    print(f"\nTop {top_n} movie recommendations for user {user_id} (Item-based Pearson):\n")
+
+    rec_num = 1
+    for movie_id, pred_score, support in top:
+        if movie_id in movie_info.index:
+            title = movie_info.loc[movie_id, "title"]
+            genres = movie_info.loc[movie_id, "genres"]
+        else:
+            title = f"(movieId={movie_id})"
+            genres = "Unknown"
+
+        print(f"{rec_num}. {title}")
+        print(f"   Genres: {genres}")
+        print(f"   Predicted score: {pred_score:.3f} | Similar-movie links used: {support}\n")
+        rec_num += 1
 
 
-# USER INPUT SECTION
 if __name__ == "__main__":
     df = pd.read_csv('ml-latest-small/ml-latest-small/ratings.csv')
-    valid_users = df['userId'].unique()
+    valid_users = set(df['userId'].unique())
 
     while True:
         try:
-            user_input = input("Enter a user ID (or 'q' to quit): ")
+            user_input = input("Enter a user ID (or 'q' to quit): ").strip()
 
             if user_input.lower() == "q":
                 print("Exiting program.")
@@ -108,8 +150,13 @@ if __name__ == "__main__":
                 print("❌ That user ID does not exist in the dataset. Try again.\n")
                 continue
 
-            print(f"\nRunning recommendations for user {user_input}...\n")
-            userToUser(user_input)
+            print(f"\nRunning item-based recommendations for user {user_input}...\n")
+            recommend_item_based(
+                user_id=user_input,
+                top_n=5,
+                per_movie_neighbors=30,
+                min_common_users=2
+            )
             break
 
         except ValueError:
